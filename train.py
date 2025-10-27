@@ -16,21 +16,12 @@ MODELS_DIR = BASE_DIR / "models"
 MODEL_PATH = MODELS_DIR / "model-latest.pkl"
 METRICS_PATH = MODELS_DIR / "metrics.json"
 
-# --- PREPROCESAMIENTO ---
-def preprocessing_min(text):
-    text = str(text).lower()
-    text = re.sub(r"<.*?>", " ", text)
-    text = re.sub(r"http\S+|www\S+", " ", text)
-    text = re.sub(r"[^a-z\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
 # --- ENTRENAMIENTO ---
-def train_and_eval(sample_fraction: float = 0.5, use_logreg: bool = True):
+def train_and_eval(sample_fraction: float = 0.4, use_logreg: bool = True):
     """
     Entrena el modelo de emociones de forma optimizada.
     Parámetros:
-      sample_fraction : fracción del dataset a usar (0.3 = 30%)
+      sample_fraction : fracción del dataset a usar (0.4 = 40%)
       use_logreg      : True usa LogisticRegression, False usa RandomForest
     """
     print(f"🔹 Training Emotion Classifier ({'LogReg' if use_logreg else 'RF'})...")
@@ -40,7 +31,7 @@ def train_and_eval(sample_fraction: float = 0.5, use_logreg: bool = True):
     if not {"text", "label"}.issubset(df.columns):
         raise ValueError("El CSV debe tener columnas 'text' y 'label'.")
 
-    # Usar solo una fracción del dataset para hacerlo más ligero
+    # Usar solo una fracción del dataset
     if sample_fraction < 1.0:
         df = df.sample(frac=sample_fraction, random_state=42).reset_index(drop=True)
 
@@ -48,19 +39,17 @@ def train_and_eval(sample_fraction: float = 0.5, use_logreg: bool = True):
         df["text"], df["label"], test_size=0.2, random_state=42, stratify=df["label"]
     )
 
-    # --- Pipeline optimizado ---
+    # --- Modelo ---
     if use_logreg:
         model = LogisticRegression(max_iter=1000, solver="liblinear")
     else:
-        model = RandomForestClassifier(
-            n_estimators=100, max_depth=10, random_state=42, n_jobs=-1
-        )
+        model = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
 
     pipeline = Pipeline([
         ("tfidf", TfidfVectorizer(
             preprocessor=preprocessing_min,
             max_features=1000,
-            ngram_range=(1,1)
+            ngram_range=(1, 1)
         )),
         ("clf", model)
     ])
@@ -69,7 +58,6 @@ def train_and_eval(sample_fraction: float = 0.5, use_logreg: bool = True):
     pipeline.fit(X_train, y_train)
     y_pred = pipeline.predict(X_test)
 
-    # --- Métricas ---
     acc = accuracy_score(y_test, y_pred)
     metrics = classification_report(y_test, y_pred, output_dict=True)
     print(f"✅ Accuracy: {acc:.4f}")
@@ -77,19 +65,17 @@ def train_and_eval(sample_fraction: float = 0.5, use_logreg: bool = True):
     # --- Guardado ---
     MODELS_DIR.mkdir(exist_ok=True)
     bundle = {"model": pipeline, "target_names": sorted(df["label"].unique().tolist())}
-    joblib.dump(bundle, MODEL_PATH, compress=("xz", 3))
-    print(f"💾 Modelo guardado en: {MODEL_PATH} (comprimido)")
+    save_model_bundle(bundle)
 
     with open(METRICS_PATH, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
+
+    print(f"💾 Modelo guardado en: {MODEL_PATH}")
     print(f"📊 Métricas guardadas en: {METRICS_PATH}")
 
     return {"accuracy": acc, "samples_used": len(df), "metrics": metrics}
 
 if __name__ == "__main__":
-    # Puedes ajustar estas variables libremente:
-    #  - sample_fraction controla cuánta data usar
-    #  - use_logreg=True usa Logistic Regression (más ligero)
     result = train_and_eval(sample_fraction=0.4, use_logreg=True)
     print("\n🔍 Training Summary:")
     print(json.dumps(result["metrics"], indent=2))
