@@ -1,0 +1,57 @@
+name: CD to Hugging Face Space
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ["main"]
+    paths:
+      - "app.py"
+      - "requirements.txt"
+      - "models/**"
+      - "train.py"
+      - "model_utils.py"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-lfs and huggingface_hub
+        run: |
+          sudo apt-get update && sudo apt-get install -y git-lfs
+          git lfs install
+          python -m pip install --upgrade pip
+          pip install huggingface_hub
+
+      - name: Push to Space repo (safe rsync)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ secrets.HF_SPACE_ID }}
+        run: |
+          set -euo pipefail
+      
+          WORKDIR="${RUNNER_TEMP}/hf_space_sync"
+          mkdir -p "$WORKDIR"
+          echo "Working dir: $WORKDIR"
+      
+          # 1) Clona el Space FUERA del workspace para evitar recursion
+          git clone "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_ID}" "${WORKDIR}/space_repo"
+      
+          # 2) Sincroniza del repo de GitHub -> Space (excluyendo metadatos y el propio dir)
+          rsync -av --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude ".gitattributes" \
+            "${GITHUB_WORKSPACE}/" "${WORKDIR}/space_repo/"
+      
+          # 3) Commit & push
+          cd "${WORKDIR}/space_repo"
+          git lfs install
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "deploy: sync from GitHub main" || echo "No changes to commit"
+          git push origin HEAD

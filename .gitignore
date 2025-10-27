@@ -1,0 +1,20 @@
+# --- Carpetas de Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+*.egg
+.env/
+.venv/
+venv/
+ENV/
+
+# Ignorar modelos pesados excepto el principal
+models/*.pkl
+!models/model-latest.pkl
+
+# --- Excepciones (mantener archivos críticos) ---
+!.github/
+!requirements.txt
+!README.md
