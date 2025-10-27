@@ -7,7 +7,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
-from model_utils import save_model_bundle
+from model_utils import save_model_bundle, preprocessing_min
 
 # --- RUTAS ---
 BASE_DIR = Path(__file__).resolve().parent
